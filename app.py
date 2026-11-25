@@ -1,97 +1,137 @@
 """
 CodeVerix – LLM to LLM Communication System
-Streamlit Web Dashboard
+Optimized Streamlit Web Dashboard with Live Real-Time Message Streaming
 
 Run:  streamlit run app.py
 """
 
-import streamlit as st
-import time
 import json
 import os
+import re
 from datetime import datetime
-from pathlib import Path
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ─────────────────────────────────────────────────────────────
-#  Page config  (MUST be first Streamlit call)
+#  Page config (MUST be first Streamlit call)
 # ─────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CodeVerix – LLM↔LLM",
+    page_title="CodeVerix – Live LLM↔LLM",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────────────────────
-#  Custom CSS
+#  Custom CSS (Modern Glassmorphic Dark UI)
 # ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* General */
-body { font-family: 'Segoe UI', sans-serif; }
+.block-container {
+    padding-top: 1.4rem;
+    padding-bottom: 2rem;
+    max-width: 1180px;
+}
 
-/* Chat bubbles */
-.msg-system {
-    background: linear-gradient(90deg, #1a1a2e, #16213e);
-    color: #a0d4ff;
-    border-left: 4px solid #4fc3f7;
-    padding: 10px 16px;
-    border-radius: 8px;
-    margin: 6px 0;
-    font-size: 0.88rem;
+/* Header */
+.hero-box {
+    background: linear-gradient(135deg, rgba(79,139,249,0.14), rgba(0,230,118,0.08));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 1.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
-.msg-coder {
-    background: linear-gradient(135deg, #0f3460, #16213e);
-    color: #90caf9;
-    border-left: 4px solid #42a5f5;
-    padding: 14px 18px;
-    border-radius: 10px;
-    margin: 10px 0;
-}
-.msg-validator {
-    background: linear-gradient(135deg, #1b4332, #0d2818);
-    color: #a5d6a7;
-    border-left: 4px solid #66bb6a;
-    padding: 14px 18px;
-    border-radius: 10px;
-    margin: 10px 0;
-}
-.msg-pass   { border-left-color: #00e676 !important; }
-.msg-fail   { border-left-color: #ff5252 !important; }
-
-.sender-badge {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    opacity: 0.8;
-    margin-bottom: 6px;
-}
-.timestamp { font-size: 0.7rem; opacity: 0.5; float: right; }
-
-/* Title */
 .main-title {
-    text-align: center;
-    font-size: 2.4rem;
+    font-size: 2rem;
     font-weight: 800;
-    background: linear-gradient(90deg, #42a5f5, #66bb6a);
+    background: linear-gradient(90deg, #60A5FA, #34D399);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 0.2rem;
+    margin: 0;
+    line-height: 1.2;
 }
-.subtitle { text-align: center; color: #888; font-size: 1rem; margin-bottom: 1.5rem; }
+.subtitle {
+    color: #94A3B8;
+    font-size: 0.92rem;
+    margin-top: 0.25rem;
+}
+.pill-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: rgba(52, 211, 153, 0.14);
+    color: #34D399;
+    border: 1px solid rgba(52, 211, 153, 0.35);
+}
 
-/* Status bar */
-.status-bar {
-    background: #1e1e2e;
-    padding: 8px 16px;
+/* Metric cards */
+[data-testid="stMetric"] {
+    background: rgba(19, 25, 43, 0.85);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 0.8rem 1rem;
+}
+
+/* Chat message cards */
+.msg-system {
+    background: rgba(30, 41, 59, 0.55);
+    color: #93C5FD;
+    border-left: 3px solid #38BDF8;
+    padding: 8px 14px;
     border-radius: 8px;
-    font-size: 0.85rem;
-    margin-bottom: 10px;
-    color: #ccc;
+    margin: 6px 0;
+    font-size: 0.86rem;
+}
+.msg-header {
+    padding: 10px 16px;
+    border-radius: 12px 12px 4px 4px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.msg-coder-header {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(30, 58, 138, 0.18));
+    border-left: 4px solid #60A5FA;
+    color: #BFDBFE;
+}
+.msg-val-pass-header {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(6, 78, 59, 0.18));
+    border-left: 4px solid #34D399;
+    color: #A7F3D0;
+}
+.msg-val-fail-header {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(127, 29, 29, 0.18));
+    border-left: 4px solid #F87171;
+    color: #FECACA;
+}
+.sender-badge {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+.timestamp {
+    font-size: 0.74rem;
+    opacity: 0.7;
+}
+.score-pill {
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(255,255,255,0.12);
+    margin-left: 8px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -100,10 +140,84 @@ body { font-family: 'Segoe UI', sans-serif; }
 # ─────────────────────────────────────────────────────────────
 #  Session state initialisation
 # ─────────────────────────────────────────────────────────────
-if "messages"       not in st.session_state: st.session_state.messages       = []
-if "running"        not in st.session_state: st.session_state.running        = False
-if "result"         not in st.session_state: st.session_state.result         = None
-if "api_configured" not in st.session_state: st.session_state.api_configured = False
+if "messages"  not in st.session_state: st.session_state.messages  = []
+if "result"    not in st.session_state: st.session_state.result    = None
+if "task_text" not in st.session_state: st.session_state.task_text = ""
+
+
+# ─────────────────────────────────────────────────────────────
+#  Helpers
+# ─────────────────────────────────────────────────────────────
+def _get_secret(key: str, default: str = "") -> str:
+    val = os.getenv(key, "")
+    if val:
+        return val
+    try:
+        return str(st.secrets.get(key, default))
+    except Exception:
+        return default
+
+
+def _extract_python_code(text: str) -> str:
+    if "```python" in text:
+        return text.split("```python", 1)[1].split("```", 1)[0].strip()
+    if "```" in text:
+        return text.split("```", 1)[1].split("```", 1)[0].strip()
+    return ""
+
+
+def _extract_score(text: str) -> str:
+    match = re.search(r"SCORE:\s*([0-9]+(?:\.[0-9]+)?\s*/\s*10)", text, re.IGNORECASE)
+    return match.group(1).replace(" ", "") if match else ""
+
+
+def render_message(msg: dict):
+    """Render a single message in the live LLM-to-LLM feed."""
+    role    = msg.get("role", "system")
+    sender  = msg.get("sender", "")
+    content = msg.get("content", "")
+    ts      = msg.get("timestamp", "")
+
+    if role == "system":
+        st.markdown(
+            f'<div class="msg-system">🔄 {content} <span class="timestamp" style="float:right">{ts}</span></div>',
+            unsafe_allow_html=True,
+        )
+    elif role == "coder":
+        st.markdown(
+            f'<div class="msg-header msg-coder-header">'
+            f'  <span class="sender-badge">🤖 {sender}</span>'
+            f'  <span class="timestamp">{ts}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if "```python" in content:
+            before, rest = content.split("```python", 1)
+            code_parts = rest.split("```", 1)
+            if before.strip():
+                st.markdown(before.strip())
+            st.code(code_parts[0].strip(), language="python")
+            if len(code_parts) > 1 and code_parts[1].strip():
+                st.markdown(code_parts[1].strip())
+        else:
+            st.markdown(content)
+
+    elif role == "validator":
+        is_pass = "VALIDATION RESULT: PASS" in content.upper()
+        score   = _extract_score(content)
+        score_html = f'<span class="score-pill">Score: {score}</span>' if score else ""
+        hdr_cls = "msg-val-pass-header" if is_pass else "msg-val-fail-header"
+        status_txt = "PASS ✅" if is_pass else "FAIL ❌"
+
+        st.markdown(
+            f'<div class="msg-header {hdr_cls}">'
+            f'  <span class="sender-badge">🔍 {sender} · {status_txt}{score_html}</span>'
+            f'  <span class="timestamp">{ts}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        with st.expander("📋 Full Validation Report", expanded=not is_pass):
+            st.markdown(content)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -111,16 +225,6 @@ if "api_configured" not in st.session_state: st.session_state.api_configured = F
 # ─────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
-
-    # Helper to read secrets if deployed on Streamlit Cloud
-    def _get_secret(key: str, default: str = "") -> str:
-        val = os.getenv(key, "")
-        if val:
-            return val
-        try:
-            return str(st.secrets.get(key, default))
-        except Exception:
-            return default
 
     provider_labels = {
         "gemini": "✨ Google Gemini (Free Tier)",
@@ -142,18 +246,10 @@ with st.sidebar:
 
     if provider == "free":
         st.success("✅ No API key required! (Rate-limited; use Gemini Free Tier for heavy use)")
-        coder_model = st.selectbox(
-            "Coder Model",
-            ["openai", "qwen-coder", "mistral", "llama"],
-            index=0,
-        )
-        validator_model = st.selectbox(
-            "Validator Model",
-            ["openai", "mistral", "llama"],
-            index=0,
-        )
+        coder_model     = st.selectbox("Coder Model",     ["openai", "qwen-coder", "mistral", "llama"], index=0)
+        validator_model = st.selectbox("Validator Model", ["openai", "mistral", "llama"], index=0)
     elif provider == "ollama":
-        st.info("💻 Runs locally via Ollama (`http://localhost:11434`). No API key needed!")
+        st.info("💻 Runs locally via Ollama (`http://localhost:11434`).")
         coder_model     = st.text_input("Coder Model",     value=os.getenv("CODER_MODEL", "llama3.2"))
         validator_model = st.text_input("Validator Model", value=os.getenv("VALIDATOR_MODEL", "llama3.2"))
     elif provider == "gemini":
@@ -161,7 +257,7 @@ with st.sidebar:
             "Gemini API Key",
             value=_get_secret("GEMINI_API_KEY"),
             type="password",
-            help="Get from https://aistudio.google.com"
+            help="Free key from https://aistudio.google.com/apikey",
         )
         if api_key:
             os.environ["GEMINI_API_KEY"] = api_key
@@ -169,24 +265,24 @@ with st.sidebar:
         coder_model = st.selectbox(
             "Coder Model",
             ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemma-4-31b-it"],
-            index=0
+            index=0,
         )
         validator_model = st.selectbox(
             "Validator Model",
             ["gemini-3.8-flash", "gemini-pro-latest", "gemini-flash-latest", "gemma-4-31b-it"],
-            index=0
+            index=0,
         )
     else:
         api_key = st.text_input(
             "OpenAI API Key",
             value=_get_secret("OPENAI_API_KEY"),
-            type="password"
+            type="password",
         )
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
 
         coder_model     = st.selectbox("Coder Model",     ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"])
-        validator_model = st.selectbox("Validator Model", ["gpt-4o",      "gpt-4o-mini"])
+        validator_model = st.selectbox("Validator Model", ["gpt-4o", "gpt-4o-mini"])
 
     os.environ["CODER_MODEL"]     = coder_model
     os.environ["VALIDATOR_MODEL"] = validator_model
@@ -194,255 +290,176 @@ with st.sidebar:
     max_rounds = st.slider("Max Validation Rounds", 1, 5, 2)
 
     st.divider()
-    st.markdown("### 📊 Architecture")
-    st.markdown("""
-```
- Human Input
-      │
-      ▼
- Orchestrator
-  ┌───────────┐
-  │ CoderLLM  │──── writes code ────►
-  └───────────┘                      │
-                                     ▼
-  ┌──────────────┐           ValidatorLLM
-  │  PASS ✅     │◄─── validates ────┤
-  │  FAIL ❌     │    (loops back)   │
-  └──────────────┘                   │
-        │                            │
-   Human sees                  Human sees
-   full chat                   full chat
-```
-    """)
+    st.markdown("### 🔄 How It Works")
+    st.caption("1️⃣ **CoderLLM** writes Python code for your task.")
+    st.caption("2️⃣ **ValidatorLLM** reviews correctness, edge cases & PEP8.")
+    st.caption("3️⃣ If **FAIL**, feedback loops back to CoderLLM automatically.")
+    st.caption("4️⃣ You watch every message **live**!")
 
     st.divider()
-    if st.button("🗑️ Clear Conversation"):
+    if st.button("🗑️ Clear Conversation", use_container_width=True):
         st.session_state.messages = []
         st.session_state.result   = None
         st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────
-#  Header
+#  Header & Metrics
 # ─────────────────────────────────────────────────────────────
-st.markdown('<div class="main-title">🤖 CodeVerix</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">LLM-to-LLM Communication System · Human Observable · Druidot Consulting</div>', unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <div class="hero-box">
+        <div>
+            <div class="main-title">🤖 CodeVerix</div>
+            <div class="subtitle">Human-Observable LLM-to-LLM Coding & Validation System</div>
+        </div>
+        <div class="pill-badge">● {provider_labels[provider]}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# Key metrics row
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Messages",   len(st.session_state.messages))
-col2.metric("Coder Messages",   sum(1 for m in st.session_state.messages if m.get("role") == "coder"))
-col3.metric("Validator Messages", sum(1 for m in st.session_state.messages if m.get("role") == "validator"))
-passed_count = sum(1 for m in st.session_state.messages if "PASS" in m.get("content","").upper() and m.get("role") == "validator")
-col4.metric("Validations Passed", passed_count)
+coder_count = sum(1 for m in st.session_state.messages if m.get("role") == "coder")
+val_count   = sum(1 for m in st.session_state.messages if m.get("role") == "validator")
+pass_count  = sum(
+    1 for m in st.session_state.messages
+    if m.get("role") == "validator" and "VALIDATION RESULT: PASS" in m.get("content", "").upper()
+)
 
-st.divider()
-
-
-# ─────────────────────────────────────────────────────────────
-#  Helper: render one message bubble
-# ─────────────────────────────────────────────────────────────
-def render_message(msg: dict):
-    role    = msg.get("role", "system")
-    sender  = msg.get("sender", "")
-    content = msg.get("content", "")
-    ts      = msg.get("timestamp", "")
-
-    if role == "system":
-        st.markdown(
-            f'<div class="msg-system">🔄 {content} <span class="timestamp">{ts}</span></div>',
-            unsafe_allow_html=True
-        )
-    elif role == "coder":
-        # Extract code block if present
-        st.markdown(
-            f'<div class="msg-coder"><div class="sender-badge">🤖 {sender}</div>'
-            f'<span class="timestamp">{ts}</span></div>',
-            unsafe_allow_html=True
-        )
-        # Parse EXPLANATION / code / NOTES sections
-        _render_coder_content(content)
-
-    elif role == "validator":
-        is_pass = "VALIDATION RESULT: PASS" in content.upper()
-        extra_cls = "msg-pass" if is_pass else "msg-fail"
-        st.markdown(
-            f'<div class="msg-validator {extra_cls}"><div class="sender-badge">🔍 {sender}</div>'
-            f'<span class="timestamp">{ts}</span></div>',
-            unsafe_allow_html=True
-        )
-        _render_validator_content(content, is_pass)
-
-
-def _render_coder_content(content: str):
-    """Render coder output with syntax-highlighted code block."""
-    if "```python" in content:
-        parts = content.split("```python")
-        # text before code
-        if parts[0].strip():
-            st.markdown(parts[0])
-        rest = parts[1]
-        code_parts = rest.split("```")
-        code = code_parts[0]
-        st.code(code.strip(), language="python")
-        if len(code_parts) > 1 and code_parts[1].strip():
-            st.markdown(code_parts[1])
-    else:
-        st.markdown(content)
-
-
-def _render_validator_content(content: str, is_pass: bool):
-    """Render validation with colour-coded status."""
-    icon = "✅" if is_pass else "❌"
-    if is_pass:
-        st.success(f"{icon} VALIDATION PASSED")
-    else:
-        st.error(f"{icon} VALIDATION FAILED")
-    # Show full content in expander
-    with st.expander("📋 Full Validation Report", expanded=not is_pass):
-        st.markdown(content)
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Messages",     len(st.session_state.messages))
+c2.metric("Code Generations",   coder_count)
+c3.metric("Validations",        val_count)
+c4.metric("Validations Passed", pass_count)
 
 
 # ─────────────────────────────────────────────────────────────
-#  Main layout: chat area + input
+#  Task Input & Quick Examples
 # ─────────────────────────────────────────────────────────────
-chat_area = st.container()
-
-with chat_area:
-    if not st.session_state.messages:
-        st.info(
-            "👋 Welcome to **CodeVerix**!\n\n"
-            "Enter a coding task below (e.g. *'Write a Python function to find prime numbers'*) "
-            "and watch **CoderLLM** and **ValidatorLLM** collaborate live!\n\n"
-            "🆓 **Free AI** is built-in (no API key needed), or choose **Google Gemini** in the sidebar."
-        )
-    for msg in st.session_state.messages:
-        render_message(msg)
-
-
-# ─────────────────────────────────────────────────────────────
-#  Input area
-# ─────────────────────────────────────────────────────────────
-st.divider()
-
-# Quick task examples
-st.markdown("**🚀 Quick tasks:**")
+st.markdown("#### 🚀 Quick Tasks")
 example_tasks = [
-    "Write a Python function to find all prime numbers up to N using Sieve of Eratosthenes",
-    "Write a Python class for a Stack data structure with push, pop, peek operations",
-    "Write a Python function to merge two sorted lists into one sorted list",
-    "Write a Python decorator that logs function calls with arguments and return values",
-    "Write a Python function to parse a CSV string and return a list of dictionaries",
+    ("🔢 Prime Sieve",     "Write a Python function to find all prime numbers up to N using Sieve of Eratosthenes"),
+    ("📚 Stack Class",     "Write a Python class for a Stack data structure with push, pop, peek, and is_empty methods"),
+    ("🔀 Merge Sorted",    "Write a Python function to merge two sorted lists into one sorted list without using sort()"),
+    ("⏱️ Timer Decorator", "Write a Python decorator that measures and logs function execution time"),
+    ("📄 CSV Parser",      "Write a Python function to parse a CSV string and return a list of dictionaries"),
 ]
 qcols = st.columns(len(example_tasks))
-selected_example = ""
-for i, (col, task) in enumerate(zip(qcols, example_tasks)):
-    short = task[:40] + "..."
-    if col.button(short, key=f"ex_{i}"):
-        selected_example = task
+for i, (col, (label, full_task)) in enumerate(zip(qcols, example_tasks)):
+    if col.button(label, key=f"ex_{i}", use_container_width=True):
+        st.session_state.task_text = full_task
+        st.rerun()
 
 task_input = st.text_area(
     "💬 Enter your coding task:",
-    value=selected_example,
-    height=80,
-    placeholder="e.g. Write a Python function that reverses a linked list...",
+    key="task_text",
+    height=88,
+    placeholder="e.g. Write a Python function that validates an email address using regex and handles edge cases...",
 )
 
-btn_col1, btn_col2, btn_col3 = st.columns([2, 1, 1])
-run_btn    = btn_col1.button("▶️ Run LLM-to-LLM Session", type="primary", use_container_width=True)
-export_btn = btn_col2.button("💾 Export Conversation",    use_container_width=True)
-_          = btn_col3.button("🔄 Clear",                  use_container_width=True, on_click=lambda: st.session_state.update(messages=[], result=None))
+b1, b2, b3 = st.columns([2.2, 1, 1])
+run_btn = b1.button("▶️ Run Live LLM-to-LLM Session", type="primary", use_container_width=True)
+if st.session_state.messages:
+    b2.download_button(
+        "⬇️ Download JSON Log",
+        data=json.dumps(st.session_state.messages, indent=2, ensure_ascii=False),
+        file_name=f"codeverix_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+else:
+    b2.button("⬇️ Download JSON Log", disabled=True, use_container_width=True)
+
+if b3.button("🔄 Reset", use_container_width=True):
+    st.session_state.messages  = []
+    st.session_state.result    = None
+    st.session_state.task_text = ""
+    st.rerun()
+
+st.divider()
 
 
 # ─────────────────────────────────────────────────────────────
-#  Run the LLM session
+#  Live Conversation Feed
 # ─────────────────────────────────────────────────────────────
-if run_btn and task_input.strip():
-    # Validate API key only for gemini / openai (free provider needs no key)
-    provider_now = os.getenv("LLM_PROVIDER", "free").lower()
-    needs_key = provider_now in ("gemini", "openai")
-    key_name = "GEMINI_API_KEY" if provider_now == "gemini" else "OPENAI_API_KEY"
-    if needs_key and not os.getenv(key_name, "").strip():
-        st.error("⚠️ Please enter your API key in the sidebar (or switch to '🆓 Free AI' — no key needed)!")
-    else:
-        # Clear previous session
-        st.session_state.messages = []
-        st.session_state.result   = None
+tab_chat, tab_code = st.tabs(["💬 Live LLM↔LLM Conversation", "✅ Final Validated Code"])
 
-        # Import here so env vars are already set
-        from orchestrator import ConversationOrchestrator
+with tab_chat:
+    live_feed = st.container()
 
-        status_placeholder = st.empty()
-        progress_bar       = st.progress(0)
+    if run_btn and task_input.strip():
+        provider_now = os.getenv("LLM_PROVIDER", "free").lower()
+        needs_key    = provider_now in ("gemini", "openai")
+        key_name     = "GEMINI_API_KEY" if provider_now == "gemini" else "OPENAI_API_KEY"
 
-        def on_new_message(msg):
-            """Callback: add message to session state and trigger re-render."""
-            st.session_state.messages.append(msg.to_dict())
-            # Update status bar
-            status_placeholder.markdown(
-                f'<div class="status-bar">🔄 <b>{msg.sender}</b>: {msg.content[:100]}...</div>',
-                unsafe_allow_html=True
+        if needs_key and not os.getenv(key_name, "").strip():
+            st.error("⚠️ Please enter your API key in the sidebar (or switch to '🆓 Free Web AI' — no key needed)!")
+        else:
+            st.session_state.messages = []
+            st.session_state.result   = None
+
+            from orchestrator import ConversationOrchestrator
+
+            status_box = st.empty()
+
+            def on_new_message(msg):
+                msg_dict = msg.to_dict()
+                st.session_state.messages.append(msg_dict)
+                with live_feed:
+                    render_message(msg_dict)
+                status_box.info(f"⚡ Active: **{msg.sender}**")
+
+            orchestrator = ConversationOrchestrator(
+                max_rounds=max_rounds,
+                on_message=on_new_message,
             )
 
-        orchestrator = ConversationOrchestrator(
-            max_rounds=max_rounds,
-            on_message=on_new_message,
-        )
-
-        with st.spinner("🤖 LLMs are collaborating..."):
             try:
                 result = orchestrator.run_coding_task(task_input.strip())
                 st.session_state.result = result
-                progress_bar.progress(100)
-                status_placeholder.empty()
+                status_box.empty()
+                st.rerun()
             except Exception as e:
-                st.error(f"❌ Error: {e}\n\nMake sure your API key is valid and you have internet access.")
-                progress_bar.empty()
+                status_box.empty()
+                st.error(f"❌ Error: {e}")
 
-        st.rerun()
+    elif run_btn and not task_input.strip():
+        st.warning("⚠️ Please enter a coding task first!")
 
-elif run_btn and not task_input.strip():
-    st.warning("⚠️ Please enter a task first!")
+    with live_feed:
+        if not st.session_state.messages:
+            st.info(
+                "👋 **Ready to watch two AIs collaborate!**\n\n"
+                "Pick a quick task above or type your own, then click **▶️ Run Live LLM-to-LLM Session**.\n"
+                "You'll see **CoderLLM** write the code and **ValidatorLLM** review & validate it live."
+            )
+        else:
+            for m in st.session_state.messages:
+                render_message(m)
 
+with tab_code:
+    if st.session_state.result:
+        res = st.session_state.result
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Validation Status", "✅ PASSED" if res["passed"] else "❌ FAILED")
+        s2.metric("Rounds Taken",      res.get("rounds", 1))
+        s3.metric("Total Messages",    len(st.session_state.messages))
 
-# ─────────────────────────────────────────────────────────────
-#  Show final result summary
-# ─────────────────────────────────────────────────────────────
-if st.session_state.result:
-    result = st.session_state.result
-    st.divider()
-    st.markdown("## 📊 Session Summary")
+        code_text = _extract_python_code(res.get("final_code", ""))
+        if res["passed"]:
+            st.success("🎉 Code passed validation and is ready to use!")
+        else:
+            st.warning("⚠️ Max rounds reached without PASS. Showing latest generated code:")
 
-    rcols = st.columns(3)
-    rcols[0].metric("Status",       "✅ PASSED" if result["passed"] else "❌ FAILED")
-    rcols[1].metric("Rounds Taken", result.get("rounds", 1))
-    rcols[2].metric("Total Messages", len(st.session_state.messages))
-
-    if result["passed"]:
-        st.success("🎉 Code passed validation! Ready to use.")
-        with st.expander("📋 Final Validated Code", expanded=True):
-            code_content = result.get("final_code", "")
-            if "```python" in code_content:
-                code_part = code_content.split("```python")[1].split("```")[0]
-                st.code(code_part.strip(), language="python")
-            else:
-                st.markdown(code_content)
+        if code_text:
+            st.code(code_text, language="python")
+            st.download_button(
+                "📥 Download solution.py",
+                data=code_text,
+                file_name="solution.py",
+                mime="text/x-python",
+            )
+        else:
+            st.markdown(res.get("final_code", "No code generated yet."))
     else:
-        st.warning("⚠️ Code did NOT pass validation after all rounds. Review the conversation above.")
-
-
-# ─────────────────────────────────────────────────────────────
-#  Export
-# ─────────────────────────────────────────────────────────────
-if export_btn and st.session_state.messages:
-    log_path = f"conversation_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(log_path, "w", encoding="utf-8") as f:
-        json.dump(st.session_state.messages, f, indent=2, ensure_ascii=False)
-    st.success(f"✅ Conversation exported to `{log_path}`")
-    with open(log_path, "rb") as f:
-        st.download_button(
-            "⬇️ Download JSON",
-            f,
-            file_name=log_path,
-            mime="application/json"
-        )
+        st.info("Run a session first to see the final validated Python code here.")

@@ -112,13 +112,54 @@ if "api_configured" not in st.session_state: st.session_state.api_configured = F
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
 
-    provider = st.selectbox("LLM Provider", ["gemini", "openai"], index=0)
+    # Helper to read secrets if deployed on Streamlit Cloud
+    def _get_secret(key: str, default: str = "") -> str:
+        val = os.getenv(key, "")
+        if val:
+            return val
+        try:
+            return str(st.secrets.get(key, default))
+        except Exception:
+            return default
+
+    provider_labels = {
+        "gemini": "✨ Google Gemini (Free Tier)",
+        "free":   "🆓 Free Web AI (No API Key)",
+        "ollama": "💻 Ollama (Local Free)",
+        "openai": "🔑 OpenAI (Paid Key)",
+    }
+    default_provider = os.getenv("LLM_PROVIDER", "gemini" if _get_secret("GEMINI_API_KEY") else "free")
+    provider_keys = list(provider_labels.keys())
+    default_idx = provider_keys.index(default_provider) if default_provider in provider_keys else 0
+
+    provider = st.selectbox(
+        "LLM Provider",
+        provider_keys,
+        index=default_idx,
+        format_func=lambda k: provider_labels[k],
+    )
     os.environ["LLM_PROVIDER"] = provider
 
-    if provider == "gemini":
+    if provider == "free":
+        st.success("✅ No API key required! (Rate-limited; use Gemini Free Tier for heavy use)")
+        coder_model = st.selectbox(
+            "Coder Model",
+            ["openai", "qwen-coder", "mistral", "llama"],
+            index=0,
+        )
+        validator_model = st.selectbox(
+            "Validator Model",
+            ["openai", "mistral", "llama"],
+            index=0,
+        )
+    elif provider == "ollama":
+        st.info("💻 Runs locally via Ollama (`http://localhost:11434`). No API key needed!")
+        coder_model     = st.text_input("Coder Model",     value=os.getenv("CODER_MODEL", "llama3.2"))
+        validator_model = st.text_input("Validator Model", value=os.getenv("VALIDATOR_MODEL", "llama3.2"))
+    elif provider == "gemini":
         api_key = st.text_input(
             "Gemini API Key",
-            value=os.getenv("GEMINI_API_KEY", ""),
+            value=_get_secret("GEMINI_API_KEY"),
             type="password",
             help="Get from https://aistudio.google.com"
         )
@@ -127,18 +168,18 @@ with st.sidebar:
 
         coder_model = st.selectbox(
             "Coder Model",
-            ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"],
+            ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemma-4-31b-it"],
             index=0
         )
         validator_model = st.selectbox(
             "Validator Model",
-            ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp"],
+            ["gemini-3.8-flash", "gemini-pro-latest", "gemini-flash-latest", "gemma-4-31b-it"],
             index=0
         )
     else:
         api_key = st.text_input(
             "OpenAI API Key",
-            value=os.getenv("OPENAI_API_KEY", ""),
+            value=_get_secret("OPENAI_API_KEY"),
             type="password"
         )
         if api_key:
@@ -273,7 +314,7 @@ with chat_area:
             "👋 Welcome to **CodeVerix**!\n\n"
             "Enter a coding task below (e.g. *'Write a Python function to find prime numbers'*) "
             "and watch **CoderLLM** and **ValidatorLLM** collaborate live!\n\n"
-            "📌 Make sure to enter your API key in the sidebar first."
+            "🆓 **Free AI** is built-in (no API key needed), or choose **Google Gemini** in the sidebar."
         )
     for msg in st.session_state.messages:
         render_message(msg)
@@ -317,11 +358,12 @@ _          = btn_col3.button("🔄 Clear",                  use_container_width=
 #  Run the LLM session
 # ─────────────────────────────────────────────────────────────
 if run_btn and task_input.strip():
-    # Validate API key is set
-    provider_now = os.getenv("LLM_PROVIDER", "gemini")
-    key_name     = "GEMINI_API_KEY" if provider_now == "gemini" else "OPENAI_API_KEY"
-    if not os.getenv(key_name, "").strip():
-        st.error("⚠️ Please enter your API key in the sidebar first!")
+    # Validate API key only for gemini / openai (free provider needs no key)
+    provider_now = os.getenv("LLM_PROVIDER", "free").lower()
+    needs_key = provider_now in ("gemini", "openai")
+    key_name = "GEMINI_API_KEY" if provider_now == "gemini" else "OPENAI_API_KEY"
+    if needs_key and not os.getenv(key_name, "").strip():
+        st.error("⚠️ Please enter your API key in the sidebar (or switch to '🆓 Free AI' — no key needed)!")
     else:
         # Clear previous session
         st.session_state.messages = []

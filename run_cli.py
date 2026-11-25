@@ -135,13 +135,13 @@ def interactive_mode():
 
 
 if __name__ == "__main__":
-    # Check API key
-    provider = os.getenv("LLM_PROVIDER", "gemini")
-    key_name = "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
-    if not os.getenv(key_name, "").strip():
-        print(f"ERROR: {key_name} not set.")
-        print("Copy .env.example to .env and add your API key.")
-        sys.exit(1)
+    # Check API key (not needed for 'free' provider)
+    provider = os.getenv("LLM_PROVIDER", "free").lower()
+    if provider in ("gemini", "openai"):
+        key_name = "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
+        if not os.getenv(key_name, "").strip():
+            print(f"ERROR: {key_name} not set. (Or set LLM_PROVIDER=free in .env to run without any API key)")
+            sys.exit(1)
 
     if len(sys.argv) > 1:
         task = " ".join(sys.argv[1:])

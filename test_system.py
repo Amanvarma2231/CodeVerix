@@ -196,6 +196,24 @@ class TestOrchestrator(unittest.TestCase):
                 self.assertIn(key, entry)
 
 
+class TestFreeProvider(unittest.TestCase):
+    @patch("requests.post")
+    def test_free_ai_provider(self, mock_post):
+        """Free AI provider works with no API key."""
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": MOCK_CODE_RESPONSE}}]
+        }
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        with patch.dict(os.environ, {"LLM_PROVIDER": "free", "CODER_MODEL": "openai"}):
+            coder = CoderLLM()
+            msg = coder.code("Write a prime function")
+            self.assertEqual(msg.role, "coder")
+            self.assertIn("```python", msg.content)
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite  = loader.loadTestsFromModule(sys.modules[__name__])

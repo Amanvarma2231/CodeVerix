@@ -20,29 +20,18 @@ load_dotenv()
 
 def _call_gemini(model: str, system_prompt: str, user_message: str, api_key: str) -> str:
     """Call Google Gemini API (uses new google-genai SDK)."""
-    try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model=model,
-            contents=user_message,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.7,
-            )
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model=model,
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0.7,
         )
-        return response.text
-    except ImportError:
-        # Fallback to deprecated SDK if new one not installed
-        import google.generativeai as genai_old
-        genai_old.configure(api_key=api_key)
-        full_model = genai_old.GenerativeModel(
-            model_name=model,
-            system_instruction=system_prompt
-        )
-        response = full_model.generate_content(user_message)
-        return response.text
+    )
+    return response.text
 
 
 def _call_openai(model: str, system_prompt: str, user_message: str, api_key: str) -> str:
@@ -59,10 +48,58 @@ def _call_openai(model: str, system_prompt: str, user_message: str, api_key: str
     return resp.choices[0].message.content
 
 
+def _call_free_ai(model: str, system_prompt: str, user_message: str) -> str:
+    """Call Free AI (Pollinations AI OpenAI-compatible endpoint — no API key required)."""
+    import requests
+    resp = requests.post(
+        "https://text.pollinations.ai/openai",
+        json={
+            "model": model or "openai",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_message},
+            ],
+        },
+        timeout=90,
+    )
+    if resp.status_code in (402, 429):
+        raise RuntimeError(
+            "Free Web AI rate limit reached. Switch to 'Google Gemini (Free Tier)' "
+            "in the sidebar (free key from https://aistudio.google.com) or 'Ollama (Local Free)'."
+        )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+def _call_ollama(model: str, system_prompt: str, user_message: str) -> str:
+    """Call local Ollama server (100% free, unlimited, offline)."""
+    import requests
+    base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    resp = requests.post(
+        f"{base_url}/api/chat",
+        json={
+            "model": model or "llama3.2",
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_message},
+            ],
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json()["message"]["content"]
+
+
 def call_llm(model: str, system_prompt: str, user_message: str) -> str:
     """Unified LLM caller - picks provider from env."""
     provider = os.getenv("LLM_PROVIDER", "gemini").lower()
-    if provider == "openai":
+    if provider == "free":
+        return _call_free_ai(model, system_prompt, user_message)
+    elif provider == "ollama":
+        return _call_ollama(model, system_prompt, user_message)
+    elif provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "")
         return _call_openai(model, system_prompt, user_message, api_key)
     else:
